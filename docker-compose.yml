@@ -1,0 +1,37 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-asistente}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asistente}
+      POSTGRES_DB: ${POSTGRES_DB:-asistente}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asistente} -d ${POSTGRES_DB:-asistente}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-asistente}:${POSTGRES_PASSWORD:-asistente}@db:5432/${POSTGRES_DB:-asistente}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MOCK_RESPONSE: ${LLM_MOCK_RESPONSE:-}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m asistente_server"
+
+volumes:
+  pgdata:
