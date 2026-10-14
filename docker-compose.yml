@@ -3,7 +3,10 @@ services:
     image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-asistente}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asistente}
+      # Sin default a proposito: una password que funciona, escrita en un
+      # archivo que se commitea, es una credencial filtrada. Compose lee el
+      # .env del directorio, que no se commitea.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD, copia .env.example a .env}
       POSTGRES_DB: ${POSTGRES_DB:-asistente}
     ports:
       - "5433:5432"
@@ -22,7 +25,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-asistente}:${POSTGRES_PASSWORD:-asistente}@db:5432/${POSTGRES_DB:-asistente}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-asistente}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-asistente}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

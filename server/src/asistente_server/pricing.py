@@ -52,6 +52,21 @@ async def current_price(
     return price
 
 
+# =========================================================== CRITICO 2 de 5 ===
+# QUE HACE     el costo de una llamada, en dolares
+# FORMULA      (entrada - cacheados)/1e6 x precio_entrada
+#              + cacheados/1e6 x precio_cacheado
+#              + salida/1e6 x precio_salida,  a 6 decimales ROUND_HALF_UP
+# POR QUE ASI  los cacheados se cobran aparte y mas baratos, asi que restarlos
+#              de la entrada no es opcional: contarlos dos veces infla la
+#              factura. Los de razonamiento NO se suman: el proveedor ya los
+#              incluye en los de salida.
+# LO VERIFICA  server/tests/test_costo_y_pipeline.py::test_costo_con_numeros_a_mano
+#              y test_los_reasoning_tokens_no_se_cobran_aparte
+# FALLA ASI    un factor 1e6 mal puesto da un costo mil veces mayor o menor y
+#              sigue siendo un numero. Se descubre en la factura del proveedor,
+#              no antes.
+# ============================================================================
 def compute_cost(price: ModelPrice, usage: TokenUsage) -> Decimal:
     """Costo del proveedor, sin markup.
 

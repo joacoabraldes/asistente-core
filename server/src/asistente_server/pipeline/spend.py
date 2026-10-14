@@ -43,6 +43,20 @@ from .interfaces import RequestContext, SpendGuard
 log = logging.getLogger(__name__)
 
 
+# =========================================================== CRITICO 5 de 5 ===
+# QUE HACE     corta la pregunta si la organizacion paso su tope del mes
+# FORMULA      a_facturar_exacto(mes en curso) >= monthly_cap_usd
+# POR QUE ASI  usa la MISMA consulta que la facturacion: si el tope se calculara
+#              con una suma y la factura con otra, en algun momento discrepan y
+#              nadie sabe cual esta bien. Y compara el monto de 6 decimales, no
+#              el de la factura: con montos chicos todo lo que no llega a medio
+#              centavo se redondea a 0,00 y el tope no se enteraria.
+# LO VERIFICA  server/tests/test_facturacion.py::test_el_tope_se_compara_contra_lo_facturado_no_contra_el_costo
+#              y test_pasado_el_tope_el_endpoint_corta_antes_de_llamar_al_proveedor
+# FALLA ASI    si el tope no cortara, la organizacion sigue gastando sin limite
+#              y el problema aparece en la factura. Un tope de 0,00 bloquea
+#              todo, que es util para suspender y facil de pisar sin querer.
+# ============================================================================
 class MonthlySpendGuard(SpendGuard):
     async def check(self, session: AsyncSession, ctx: RequestContext) -> str | None:
         resumen = await gastado_este_mes(session, ctx.organization_id)

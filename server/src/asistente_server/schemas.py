@@ -44,3 +44,17 @@ class ConsumoMensualOut(BaseModel):
     a_facturar_exacto_usd: str
     por_etapa: dict[str, str]
     tope_usd: str | None = None
+    # True cuando el mes esta cerrado: el numero ya no va a cambiar.
+    cerrado: bool = False
+
+
+class ToolResultIn(BaseModel):
+    """Lo que devuelve el cliente despues de ejecutar una herramienta."""
+
+    tool_call_id: str = Field(min_length=1, max_length=100)
+    content: str = Field(min_length=1)
+
+
+class ToolResultsIn(BaseModel):
+    external_user_id: str = Field(min_length=1, max_length=200)
+    results: list[ToolResultIn] = Field(min_length=1)

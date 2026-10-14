@@ -18,10 +18,32 @@ import pytest
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 
-TEST_URL = os.environ.get(
-    "DATABASE_URL_TEST",
-    "postgresql+psycopg://asistente:asistente@localhost:5433/asistente_test",
-)
+def _cargar_env() -> None:
+    """Lee el .env de la raiz, sin pisar lo que ya este en el entorno.
+
+    Existe para que la URL de la base de pruebas no tenga que estar escrita en
+    este archivo: una cadena de conexion con password, en un archivo que se
+    commitea, es una credencial filtrada aunque sea de un contenedor local.
+    """
+    env = SERVER_DIR.parent / ".env"
+    if not env.exists():
+        return
+    for linea in env.read_text(encoding="utf-8").splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#") or "=" not in linea:
+            continue
+        clave, valor = linea.split("=", 1)
+        os.environ.setdefault(clave.strip(), valor.strip())
+
+
+_cargar_env()
+
+TEST_URL = os.environ.get("DATABASE_URL_TEST")
+if not TEST_URL:
+    raise RuntimeError(
+        "Falta DATABASE_URL_TEST. Copia .env.example a .env y poné la password "
+        "que uses para el Postgres de docker-compose."
+    )
 # Se setean antes de importar la app, que lee la configuracion del entorno.
 os.environ["DATABASE_URL"] = TEST_URL
 os.environ["DB_NULLPOOL"] = "1"
@@ -45,7 +67,8 @@ from asistente_server.models import (  # noqa: E402
 # psycopg async no corre con el loop por defecto de Windows.
 configurar_event_loop()
 
-TABLAS = '"usage", messages, conversations, api_keys, model_prices, organizations'
+TABLAS = ('"usage", monthly_closings, messages, conversations, api_keys, '
+          'model_prices, organizations')
 
 # Precios elegidos para que el costo salga exacto y se pueda verificar a mano.
 PRECIO_ENTRADA = Decimal("1.000000")
@@ -191,15 +214,24 @@ def llm_guion(monkeypatch, uso_de_ejemplo):
     con que se la invoco.
     """
 
-    def instalar(*respuestas: tuple[tuple[str, ...], object]):
+    def instalar(*respuestas):
+        """Cada respuesta es (textos, tokens) o (textos, tokens, pedidos).
+
+        `pedidos` son ToolCallChunk: van despues del texto y antes del uso, que
+        es el orden en el que los emite la puerta del proveedor.
+        """
         guion = list(respuestas)
         llamadas: list[dict] = []
 
         async def fake(**kwargs):
             llamadas.append(kwargs)
-            textos, tokens = guion.pop(0) if guion else (("",), None)
+            respuesta = guion.pop(0) if guion else (("",), None)
+            textos, tokens = respuesta[0], respuesta[1]
+            pedidos = respuesta[2] if len(respuesta) > 2 else None
             for parte in textos:
                 yield llm.TextChunk(parte)
+            for pedido in pedidos or []:
+                yield pedido
             if tokens is not None:
                 yield tokens
 

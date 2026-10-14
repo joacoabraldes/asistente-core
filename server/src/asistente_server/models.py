@@ -14,6 +14,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -25,6 +26,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY as PgArray
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -123,8 +125,15 @@ class Message(Base):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(PgUUID(as_uuid=True), nullable=False)
     conversation_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 'user', 'assistant' o 'tool'.
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Solo en el turno del asistente que pide herramientas: la lista de pedidos,
+    # en forma neutral {id, name, arguments}. La traduccion al formato del
+    # proveedor la hace el pipeline, asi la base no queda atada a uno.
+    tool_calls: Mapped[list | None] = mapped_column(JSONB)
+    # Solo en role='tool': a que pedido contesta.
+    tool_call_id: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -180,5 +189,35 @@ class Usage(Base):
     )
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class MonthlyClosing(Base):
+    """Un mes cerrado. No se recalcula nunca mas.
+
+    El `markup_pct` se copia aca a proposito: es el que se uso para ese mes. Si
+    manana cambia el de la organizacion, los meses ya cerrados no se mueven.
+    """
+
+    __tablename__ = "monthly_closings"
+    __table_args__ = (
+        CheckConstraint("mes BETWEEN 1 AND 12", name="ck_monthly_closings_mes"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    anio: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mes: Mapped[int] = mapped_column(Integer, primary_key=True)
+    markup_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    costo_proveedor_usd: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    a_facturar_usd: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    pedidos: Mapped[int] = mapped_column(Integer, nullable=False)
+    pedidos_sin_costo: Mapped[int] = mapped_column(Integer, nullable=False)
+    por_etapa: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    cerrado_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

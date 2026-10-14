@@ -7,11 +7,13 @@ Utilidades de operacion. Todas leen `DATABASE_URL` del entorno.
 | `create_organization.py` | crea una organizacion y su API key. La key se imprime una sola vez |
 | `seed_prices.py` | carga precios de ejemplo en `model_prices` |
 | `facturacion.py` | resumen de consumo del mes por organizacion, con el markup aplicado |
+| `cerrar_mes.py` | congela el resumen de un mes para que no se recalcule nunca mas |
 
 ```bash
 uv run python scripts/seed_prices.py
 uv run python scripts/create_organization.py --name "Terminal" --model openai/gpt-4o-mini
 uv run python scripts/facturacion.py --anio 2026 --mes 9
+uv run python scripts/cerrar_mes.py --anio 2026 --mes 9
 ```
 
 `facturacion.py` imprime una columna **sin costo**: son pedidos que el proveedor

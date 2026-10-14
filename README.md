@@ -18,6 +18,7 @@ proveedor queda registrada con los tokens y el costo exactos.
 - Filtro de pertinencia: solo contesta preguntas de los temas de la organizacion
 - Tope de gasto mensual por organizacion
 - Resumen de consumo del mes y total a facturar con el markup
+- Cierre de mes: congela el total para que no se recalcule nunca mas
 
 Las otras dos capas de control —busqueda en documentos y herramientas— estan como
 interfaces que el pipeline ya llama en orden, pero todavia no hacen nada. El
@@ -167,6 +168,67 @@ La columna tiene 2 decimales, asi que un tope menor a un centavo se guarda como
 El tope mira lo **ya gastado**: corta el pedido siguiente al que paso el tope, no
 al que lo pasa.
 
+## Cerrar un mes
+
+```bash
+uv run python scripts/cerrar_mes.py --anio 2026 --mes 9
+```
+
+Congela el resumen de ese mes en `monthly_closings`, con el markup que se uso
+copiado en la fila. Desde ahi el numero **no cambia mas**: ni si cambia el markup
+de la organizacion, ni si llega una fila de consumo atrasada. El resumen pasa a
+traer `cerrado: true`.
+
+Sin cerrar, el resumen se rearma en cada consulta leyendo `markup_pct`, asi que
+cambiar el markup hoy cambia lo que se facturo en marzo y nadie se entera.
+
+Dos cosas que el script se niega a hacer:
+
+| se niega a | por que |
+|---|---|
+| cerrar el mes en curso | guardaria un total parcial que despues parece definitivo |
+| recerrar sin `--forzar` | recerrar es valido si aparecio consumo atrasado, pero tiene que ser una decision y no el efecto de volver a correr el script |
+
+Sale con codigo 1 cuando se niega y 0 cuando cierra. Antes de cerrar conviene
+mirar `pedidos_sin_costo`: despues el numero queda fijo.
+
+## Herramientas del cliente
+
+Cuando el modelo necesita un dato que el core no tiene —la curva del dia, una
+posicion— pide una herramienta y **el stream termina ahi**, sin `done`:
+
+```python
+for evento in cliente.ask_events(conversation_id="c1", external_user_id="u1",
+                                 content="Dame la curva de hoy"):
+    if isinstance(evento, ToolCallEvent):
+        pedido = evento          # .id, .name, .arguments
+
+resultado = traer_la_curva(**pedido.arguments)   # lo corre el cliente
+
+for evento in cliente.tool_results(
+    conversation_id="c1", external_user_id="u1",
+    results={pedido.id: json.dumps(resultado)},
+):
+    ...                          # aca si llegan los tokens y el done
+```
+
+El stream se cierra en vez de quedar esperando el resultado. Asi el estado
+pendiente vive en la base: funciona con varios workers, sobrevive a un reinicio,
+y la segunda vuelta la puede atender cualquier proceso.
+
+Las dos vueltas son dos llamadas al proveedor y **se cobran las dos**, cada una
+con su propia fila de consumo. Si el modelo manda argumentos que no son JSON
+valido, `arguments` llega vacio y el crudo queda en el log: un agujero visible
+en vez de un diccionario inventado.
+
+El servidor rechaza un `tool_call_id` que no pidio (400) y rechaza traer
+resultados cuando no hay pedido pendiente (409). Sin eso, un cliente podria
+inyectar texto arbitrario al prompt.
+
+**Todavia no hay ninguna herramienta registrada:** `ToolRegistry.specs()`
+devuelve lista vacia, asi que en produccion el modelo no va a pedir nada hasta
+que alguien registre la primera. Lo que esta hecho es el camino.
+
 ## Instalar solo el SDK
 
 ```bash
@@ -179,7 +241,7 @@ Necesitan Postgres levantado. No llaman a ningun proveedor real.
 
 ```bash
 docker compose up -d db
-uv run pytest
+uv run pytest    # 55 tests
 ```
 
 ## Reintentos

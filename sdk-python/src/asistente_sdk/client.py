@@ -135,6 +135,52 @@ class Asistente:
                 time.sleep(espera)
                 espera *= 2
 
+    def tool_results(
+        self,
+        *,
+        conversation_id: str,
+        external_user_id: str,
+        results: dict[str, str],
+        request_id: str | None = None,
+    ) -> Iterator[Event]:
+        """Devuelve el resultado de las herramientas y sigue la respuesta.
+
+        `results` es {tool_call_id: resultado}. Se llama despues de recibir uno o
+        mas `ToolCallEvent`, cuando el cliente ya ejecuto lo que tenia que
+        ejecutar.
+
+        Abre un stream nuevo: el de la primera vuelta ya se cerro. Es una
+        segunda llamada al proveedor y se cobra como tal, con su propia fila de
+        consumo.
+        """
+        request_id = request_id or str(uuid.uuid4())
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "X-Request-Id": request_id,
+            "Accept": "text/event-stream",
+        }
+        payload = {
+            "external_user_id": external_user_id,
+            "results": [
+                {"tool_call_id": k, "content": v} for k, v in results.items()
+            ],
+        }
+        with self._client.stream(
+            "POST",
+            f"/v1/conversations/{conversation_id}/tool_results",
+            json=payload,
+            headers=headers,
+        ) as response:
+            if response.status_code == 401:
+                response.read()
+                raise InvalidApiKey("La API key es invalida o fue revocada")
+            if response.status_code >= 400:
+                response.read()
+                raise ServerError(
+                    f"El servidor respondio {response.status_code}: {response.text}"
+                )
+            yield from _parse_sse(response.iter_lines())
+
     def consumo(self, *, anio: int | None = None, mes: int | None = None) -> ConsumoMensual:
         """Consumo del mes de la organizacion de esta API key.
 

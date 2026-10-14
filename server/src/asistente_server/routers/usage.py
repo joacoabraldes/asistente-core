@@ -44,4 +44,5 @@ async def usage_summary(
         a_facturar_exacto_usd=str(resumen.a_facturar_exacto),
         por_etapa={etapa: str(monto) for etapa, monto in resumen.por_etapa.items()},
         tope_usd=str(resumen.tope_usd) if resumen.tope_usd is not None else None,
+        cerrado=resumen.cerrado,
     )

@@ -36,6 +36,8 @@ class ConsumoMensual(BaseModel):
     a_facturar_exacto_usd: Decimal
     por_etapa: dict[str, Decimal] = {}
     tope_usd: Decimal | None = None
+    # True cuando el mes esta cerrado: ese numero ya no cambia.
+    cerrado: bool = False
 
 
 class TokenEvent(BaseModel):
@@ -64,10 +66,14 @@ class OutOfScopeEvent(BaseModel):
 
 
 class ToolCallEvent(BaseModel):
-    """Reservado: el servidor todavia no lo emite.
+    """El modelo pide una herramienta y el stream termina aca.
 
-    Cuando exista, el SDK va a ejecutar la herramienta del lado del cliente y
-    devolver el resultado para que el stream siga.
+    No llega `done` despues de esto: la respuesta todavia no existe. El cliente
+    ejecuta la herramienta y llama a `Asistente.tool_results()` con el
+    resultado, que abre un stream nuevo con la respuesta.
+
+    Si `arguments` viene vacio y el modelo mando algo, es que el JSON de los
+    argumentos estaba roto: queda vacio a proposito en vez de inventado.
     """
 
     id: str

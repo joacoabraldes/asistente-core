@@ -16,6 +16,16 @@ from .llm import TokenUsage
 from .models import Usage
 
 
+# =========================================================== CRITICO 3 de 5 ===
+# QUE HACE     registra el consumo de una llamada, una sola vez
+# FORMULA      INSERT ... ON CONFLICT (request_id) DO NOTHING
+# POR QUE ASI  el SDK reintenta cuando se corta la red. Sin el unique sobre
+#              request_id, cada reintento cobraria de nuevo la misma pregunta.
+# LO VERIFICA  server/tests/test_idempotencia.py::test_mismo_request_id_deja_una_sola_fila_de_consumo
+# FALLA ASI    si el request_id dejara de ser unico por etapa, un reintento
+#              duplica el cobro y la organizacion paga dos veces lo mismo. Las
+#              etapas usan sufijo (`:filter`) justamente para no chocar entre si.
+# ============================================================================
 async def record_usage(
     session: AsyncSession,
     *,
